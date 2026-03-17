@@ -1,0 +1,9 @@
+{
+  "name": "cors-anywhere-vercel",
+  "version": "1.0.0",
+  "description": "CORS Anywhere proxy as a Vercel serverless function",
+  "main": "api/cors.js",
+  "dependencies": {
+    "cors-anywhere": "^0.4.4"
+  }
+}
