@@ -1,6 +1,6 @@
 const corsProxy = require('cors-anywhere');
 const proxy = corsProxy.createServer({
-    originWhitelist: ['https://mywebsite.com', 'http://localhost:3000'],
+    originWhitelist: ['http://habit.loc.cc/m', 'https://habit.loc.cc/'],
     requireHeader: ['origin', 'x-requested-with'],
     removeHeaders: ['cookie', 'cookie2']
 });
