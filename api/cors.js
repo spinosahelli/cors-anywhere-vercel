@@ -1,15 +1,13 @@
 const corsProxy = require('cors-anywhere');
 
-// 从环境变量读取白名单，如果没有则用空数组（允许所有）
+// 从环境变量读取白名单
 const whitelist = process.env.CORSANYWHERE_WHITELIST 
   ? process.env.CORSANYWHERE_WHITELIST.split(',') 
   : [];
 
 const proxy = corsProxy.createServer({
-    // 白名单设置 - 请修改为你的网站地址
     originWhitelist: whitelist,
     
-    // 允许所有 WebDAV 需要的 HTTP 方法
     allowedMethods: [
         'GET', 'POST', 'PUT', 'DELETE', 'OPTIONS',
         'PROPFIND', 'PROPPATCH', 'MKCOL', 'COPY', 'MOVE',
@@ -17,49 +15,55 @@ const proxy = corsProxy.createServer({
         'VERSION-CONTROL', 'ACL'
     ],
     
-    // 允许的请求头
     allowedHeaders: [
         'Content-Type', 'Depth', 'Destination', 'If',
         'Lock-Token', 'Overwrite', 'Timeout',
         'Authorization', 'X-Requested-With'
     ],
     
-    // 移除的请求头（不要移除 WebDAV 需要的头）
-    removeHeaders: [
-        'cookie', 'cookie2'  // 只移除 cookie，保留其他
-    ],
+    removeHeaders: ['cookie', 'cookie2'],
     
-    // 设置响应头
-    setHeaders: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'PROPFIND, PROPPATCH, MKCOL, COPY, MOVE, DELETE, LOCK, UNLOCK, PUT, GET, POST, OPTIONS, HEAD',
-        'Access-Control-Allow-Headers': 'Content-Type, Depth, Destination, If, Lock-Token, Overwrite, Timeout, Authorization, X-Requested-With, Origin',
-        'Access-Control-Expose-Headers': 'DAV, Content-Length, Allow, Location, Lock-Token',
-        'Access-Control-Max-Age': '86400'  // 24小时
-    },
+    // 重要：不要在这里设置 CORS 头，让后面的逻辑处理
+    setHeaders: {},
     
-    // 需要客户端提供的头（可选，建议注释掉）
-    // requireHeader: ['origin'],  
-    
-    // 是否允许携带凭证（如果需要认证就设为 true）
     credentials: true
 });
 
 module.exports = (req, res) => {
-    // 处理 OPTIONS 预检请求（WebDAV 会频繁发送）
+    // 获取请求来源
+    const origin = req.headers.origin;
+    
+    // 检查是否在白名单中（如果白名单不为空）
+    const isAllowed = whitelist.length === 0 || (origin && whitelist.includes(origin));
+    
+    // 处理 OPTIONS 预检请求
     if (req.method === 'OPTIONS') {
-        res.writeHead(200, {
-            'Access-Control-Allow-Origin': '*',
+        const headers = {
             'Access-Control-Allow-Methods': 'PROPFIND, PROPPATCH, MKCOL, COPY, MOVE, DELETE, LOCK, UNLOCK, PUT, GET, POST, OPTIONS, HEAD',
             'Access-Control-Allow-Headers': 'Content-Type, Depth, Destination, If, Lock-Token, Overwrite, Timeout, Authorization, X-Requested-With, Origin',
             'Access-Control-Max-Age': '86400',
-            'Access-Control-Allow-Credentials': 'true',
             'Content-Length': '0'
-        });
+        };
+        
+        // 如果允许，设置具体的 origin 而不是 *
+        if (isAllowed && origin) {
+            headers['Access-Control-Allow-Origin'] = origin;
+            headers['Access-Control-Allow-Credentials'] = 'true';
+            res.writeHead(200, headers);
+        } else {
+            // 不允许，返回 403
+            res.writeHead(403);
+        }
         res.end();
         return;
     }
     
-    // 转发其他请求
+    // 非 OPTIONS 请求，先设置 CORS 头
+    if (origin && isAllowed) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+    
+    // 转发请求
     proxy.emit('request', req, res);
 };
