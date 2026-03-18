@@ -1,8 +1,7 @@
 {
-  "name": "cors-anywhere-vercel",
+  "name": "webdav-cors-proxy",
   "version": "1.0.0",
-  "description": "CORS Anywhere proxy as a Vercel serverless function",
-  "main": "api/cors.js",
+  "main": "api/proxy.js",
   "dependencies": {
     "cors-anywhere": "^0.4.4"
   }
