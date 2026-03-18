@@ -9,7 +9,7 @@ const proxy = corsProxy.createServer({
     originWhitelist: whitelist,
     requireHeader: [],
     allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PROPFIND', 'PROPPATCH', 'MKCOL', 'COPY', 'MOVE', 'LOCK', 'UNLOCK'],
-    allowedHeaders: ['Content-Type', 'Depth', 'Destination', 'If', 'Lock-Token', 'Overwrite', 'Timeout', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Depth', 'Destination', 'If', 'Lock-Token', 'Overwrite', 'Timeout', 'Authorization', 'X-Requested-With', 'Accept', 'Accept-Language'],
     removeHeaders: ['cookie', 'cookie2'],
     setHeaders: {},
     credentials: false
