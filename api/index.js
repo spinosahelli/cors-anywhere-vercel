@@ -1,45 +1,58 @@
-const cors_anywhere = require('cors-anywhere');
+export default async function handler(req, res) {
+  // 1. Set CORS headers for EVERY request
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PROPFIND, PROPPATCH, MKCOL, COPY, MOVE, LOCK, UNLOCK');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Depth, Destination, If, Lock-Token, Overwrite, Timeout, X-Requested-With, Accept, Accept-Language');
+  res.setHeader('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
 
-const proxy = cors_anywhere.createServer({
-    originWhitelist: [], // Allow all origins
-    requireHeader: [],   // Don't require X-Requested-With
-    removeHeaders: ['cookie', 'cookie2'],
-});
+  // 2. Handle Preflight (OPTIONS) immediately
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
 
-module.exports = (req, res) => {
-    // 1. Manually handle CORS Preflight for Vercel
-    // This ensures the browser always gets a 'green light' for any method/header
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', '*');
-    res.setHeader('Access-Control-Allow-Headers', '*');
-    res.setHeader('Access-Control-Allow-Credentials', 'false');
+  // 3. Extract Target URL from the path
+  // req.url is usually "/api/https://dav.com/..."
+  let targetUrl = req.url.replace(/^\/api\//, '');
+  
+  // Fix cases where double slashes are collapsed (Vercel sometimes does this)
+  if (targetUrl.startsWith('https:/') && !targetUrl.startsWith('https://')) {
+    targetUrl = targetUrl.replace('https:/', 'https://');
+  } else if (targetUrl.startsWith('http:/') && !targetUrl.startsWith('http://')) {
+    targetUrl = targetUrl.replace('http:/', 'http://');
+  }
 
-    if (req.method === 'OPTIONS') {
-        res.writeHead(200);
-        res.end();
-        return;
-    }
+  // Basic validation
+  if (!targetUrl || !targetUrl.startsWith('http')) {
+    return res.status(400).send('Usage: /api/https://your-webdav-url');
+  }
 
-    // 2. Fix the URL for Vercel's routing
-    // req.url is usually "/api/https://dav.com/..."
-    // We need to strip "/api" to leave "/https://dav.com/..."
-    let targetPath = req.url.replace(/^\/api/, '');
-    
-    // Ensure it starts with a single slash
-    if (!targetPath.startsWith('/')) {
-        targetPath = '/' + targetPath;
-    }
+  try {
+    // 4. Forward the request to the real WebDAV server
+    const response = await fetch(targetUrl, {
+      method: req.method,
+      headers: {
+        'Authorization': req.headers.authorization || '',
+        'Content-Type': req.headers['content-type'] || '',
+        'Depth': req.headers.depth || '1',
+        'Accept': req.headers.accept || '*/*',
+      },
+      // Only send body for methods that support it (PUT, POST, etc.)
+      body: ['GET', 'HEAD', 'OPTIONS'].includes(req.method) ? undefined : await req.arrayBuffer(),
+      redirect: 'follow'
+    });
 
-    // 3. If no target is provided, show status
-    if (targetPath === '/' || targetPath === '/index') {
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end('WebDAV Proxy Active. Usage: /api/https://your-webdav-url');
-        return;
-    }
+    // 5. Copy essential headers back to the browser
+    const headersToCopy = ['content-type', 'dav', 'ms-author-via'];
+    headersToCopy.forEach(h => {
+      const val = response.headers.get(h);
+      if (val) res.setHeader(h, val);
+    });
 
-    // 4. Set the URL that cors-anywhere expects
-    req.url = targetPath;
-
-    // 5. Hand off to the proxy
-    proxy.emit('request', req, res);
-};
+    // 6. Return the response data
+    const data = await response.arrayBuffer();
+    res.status(response.status).send(Buffer.from(data));
+  } catch (error) {
+    console.error('Proxy Error:', error);
+    res.status(500).send('Proxy Error: ' + error.message);
+  }
+}
