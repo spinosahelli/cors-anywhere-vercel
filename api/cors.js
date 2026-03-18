@@ -1,5 +1,6 @@
 const corsProxy = require('cors-anywhere');
 
+// 从环境变量读取白名单
 const whitelist = process.env.CORSANYWHERE_WHITELIST 
   ? process.env.CORSANYWHERE_WHITELIST.split(',') 
   : [];
@@ -30,20 +31,19 @@ module.exports = (req, res) => {
     const origin = req.headers.origin;
     const isAllowed = whitelist.length === 0 || (origin && whitelist.includes(origin));
     
-    // 处理 OPTIONS 请求
-    if (req.method === 'OPTIONS') {
-        // cors-anywhere 会自动处理 OPTIONS
-        proxy.emit('request', req, res);
-        return;
-    }
-    
-    // 检查白名单
+    // 白名单检查
     if (!isAllowed) {
         res.writeHead(403);
         res.end('Origin not allowed');
         return;
     }
+
+    // 关键修复：确保返回具体的 origin，而不是 '*'
+    // 这样即使白名单为空，也能避免与 credentials: true 冲突
+    if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+    }
     
-    // 直接转发，让 cors-anywhere 处理所有头
+    // 转发请求给 cors-anywhere
     proxy.emit('request', req, res);
 };
