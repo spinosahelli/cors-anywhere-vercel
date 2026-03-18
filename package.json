@@ -1,8 +1,5 @@
 {
   "name": "webdav-cors-proxy",
   "version": "1.0.0",
-  "main": "api/proxy.js",
-  "dependencies": {
-    "cors-anywhere": "^0.4.4"
-  }
+  "dependencies": {}
 }
