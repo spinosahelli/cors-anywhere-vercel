@@ -1,58 +1,74 @@
-export default async function handler(req, res) {
-  // 1. Set CORS headers for EVERY request
+const https = require('https');
+const http = require('http');
+
+module.exports = async (req, res) => {
+  // 1. Permissive CORS Headers - Tells the browser this proxy is safe
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PROPFIND, PROPPATCH, MKCOL, COPY, MOVE, LOCK, UNLOCK');
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Depth, Destination, If, Lock-Token, Overwrite, Timeout, X-Requested-With, Accept, Accept-Language');
-  res.setHeader('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
+  res.setHeader('Access-Control-Allow-Headers', '*'); 
+  res.setHeader('Access-Control-Max-Age', '86400');
 
   // 2. Handle Preflight (OPTIONS) immediately
+  // This is where most CORS errors happen. We respond with 200 OK immediately.
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    res.statusCode = 200;
+    res.end();
+    return;
   }
 
   // 3. Extract Target URL from the path
   // req.url is usually "/api/https://dav.com/..."
   let targetUrl = req.url.replace(/^\/api\//, '');
   
-  // Fix cases where double slashes are collapsed (Vercel sometimes does this)
+  // Fix potential URL collapsing (https:/dav.com -> https://dav.com)
   if (targetUrl.startsWith('https:/') && !targetUrl.startsWith('https://')) {
     targetUrl = targetUrl.replace('https:/', 'https://');
   } else if (targetUrl.startsWith('http:/') && !targetUrl.startsWith('http://')) {
     targetUrl = targetUrl.replace('http:/', 'http://');
   }
 
-  // Basic validation
+  // If no target is provided, show a status message
   if (!targetUrl || !targetUrl.startsWith('http')) {
-    return res.status(400).send('Usage: /api/https://your-webdav-url');
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'text/plain');
+    res.end('WebDAV Proxy Active. Usage: /api/https://your-webdav-url');
+    return;
   }
 
   try {
     // 4. Forward the request to the real WebDAV server
-    const response = await fetch(targetUrl, {
+    const parsedUrl = new URL(targetUrl);
+    const transport = parsedUrl.protocol === 'https:' ? https : http;
+
+    const proxyReq = transport.request(targetUrl, {
       method: req.method,
       headers: {
-        'Authorization': req.headers.authorization || '',
-        'Content-Type': req.headers['content-type'] || '',
-        'Depth': req.headers.depth || '1',
-        'Accept': req.headers.accept || '*/*',
-      },
-      // Only send body for methods that support it (PUT, POST, etc.)
-      body: ['GET', 'HEAD', 'OPTIONS'].includes(req.method) ? undefined : await req.arrayBuffer(),
-      redirect: 'follow'
+        ...req.headers,
+        host: parsedUrl.host, // Critical: Jianguoyun requires the correct Host header
+        connection: 'keep-alive'
+      }
+    }, (proxyRes) => {
+      // Copy status and headers back to the browser
+      res.statusCode = proxyRes.statusCode;
+      Object.keys(proxyRes.headers).forEach(key => {
+        // Don't copy back headers that might break CORS or encoding
+        const lowerKey = key.toLowerCase();
+        if (!['content-encoding', 'transfer-encoding', 'access-control-allow-origin'].includes(lowerKey)) {
+          res.setHeader(key, proxyRes.headers[key]);
+        }
+      });
+      proxyRes.pipe(res);
     });
 
-    // 5. Copy essential headers back to the browser
-    const headersToCopy = ['content-type', 'dav', 'ms-author-via'];
-    headersToCopy.forEach(h => {
-      const val = response.headers.get(h);
-      if (val) res.setHeader(h, val);
+    proxyReq.on('error', (err) => {
+      res.statusCode = 500;
+      res.end('Proxy Error: ' + err.message);
     });
 
-    // 6. Return the response data
-    const data = await response.arrayBuffer();
-    res.status(response.status).send(Buffer.from(data));
+    // Pipe the request body (for PUT/POST) to the target
+    req.pipe(proxyReq);
   } catch (error) {
-    console.error('Proxy Error:', error);
-    res.status(500).send('Proxy Error: ' + error.message);
+    res.statusCode = 500;
+    res.end('Internal Error: ' + error.message);
   }
-}
+};
