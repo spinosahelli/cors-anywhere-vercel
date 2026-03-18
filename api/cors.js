@@ -1,6 +1,6 @@
 const corsProxy = require('cors-anywhere');
 const proxy = corsProxy.createServer({
-    originWhitelist: ['https://dav.jianguoyun.com/dav/', 'https://daka.995266.xyz/'],
+    originWhitelist: [],
     requireHeader: ['origin', 'x-requested-with'],
     removeHeaders: ['cookie', 'cookie2']
 });
