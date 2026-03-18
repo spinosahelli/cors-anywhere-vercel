@@ -28,21 +28,29 @@ module.exports = (req, res) => {
     const origin = req.headers.origin;
     const url = req.url;
     
-    // 如果是根路径访问（直接打开网站），不检查白名单，显示帮助页面
+    // 1. 处理根路径访问
     if (url === '/' || url === '') {
         proxy.emit('request', req, res);
         return;
     }
     
+    // 2. 安全检查
     const isAllowed = whitelist.length === 0 || (origin && whitelist.includes(origin));
     
-    // 白名单检查
+    // 3. 关键修复：只要有 origin，就设置 CORS 头
+    // 这样即使返回 403 错误，浏览器也能显示具体信息
+    if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'false');
+    }
+
+    // 4. 白名单检查失败，返回 403 但带着 CORS 头
     if (!isAllowed) {
         res.writeHead(403, { 'Content-Type': 'text/plain' });
-        res.end('Origin not allowed');
+        res.end(`Origin not allowed: ${origin}`);
         return;
     }
 
-    // 转发请求
+    // 5. 转发请求
     proxy.emit('request', req, res);
 };
