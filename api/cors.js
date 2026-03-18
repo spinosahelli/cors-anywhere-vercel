@@ -1,13 +1,18 @@
 const corsProxy = require('cors-anywhere');
 
-// 从环境变量读取白名单
+// 从环境变量读取白名单，如果没有则用空数组（允许所有）
 const whitelist = process.env.CORSANYWHERE_WHITELIST 
   ? process.env.CORSANYWHERE_WHITELIST.split(',') 
   : [];
 
 const proxy = corsProxy.createServer({
+    // 白名单设置
     originWhitelist: whitelist,
     
+    // 关键修改：禁用对 X-Requested-With 头的要求
+    requireHeader: [],  // 改为空数组，不再要求特定头
+    
+    // 允许所有 WebDAV 需要的 HTTP 方法
     allowedMethods: [
         'GET', 'POST', 'PUT', 'DELETE', 'OPTIONS',
         'PROPFIND', 'PROPPATCH', 'MKCOL', 'COPY', 'MOVE',
@@ -15,17 +20,22 @@ const proxy = corsProxy.createServer({
         'VERSION-CONTROL', 'ACL'
     ],
     
+    // 允许的请求头
     allowedHeaders: [
         'Content-Type', 'Depth', 'Destination', 'If',
         'Lock-Token', 'Overwrite', 'Timeout',
         'Authorization', 'X-Requested-With'
     ],
     
-    removeHeaders: ['cookie', 'cookie2'],
+    // 移除的请求头
+    removeHeaders: [
+        'cookie', 'cookie2'
+    ],
     
-    // 重要：不要在这里设置 CORS 头，让后面的逻辑处理
+    // 不在这里预设 CORS 头，让后面的动态逻辑处理
     setHeaders: {},
     
+    // 允许携带凭证
     credentials: true
 });
 
