@@ -7,17 +7,16 @@ module.exports = async (req, res) => {
   const requestHeaders = req.headers['access-control-request-headers'];
   
   const setCorsHeaders = (response) => {
-    response.setHeader('Access-Control-Allow-Origin', origin);
+    response.setHeader('Access-Control-Allow-Origin', '*');
     response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PROPFIND, PROPPATCH, MKCOL, COPY, MOVE, LOCK, UNLOCK');
     
     const allowedHeaders = requestHeaders || 'Authorization, Content-Type, Depth, Destination, If, Lock-Token, Overwrite, Timeout, X-Requested-With, Accept, Accept-Language, Cache-Control, Content-Length, Range, Prefer, X-Target-URL, Translate, MS-Author-Via';
     response.setHeader('Access-Control-Allow-Headers', allowedHeaders);
     
     response.setHeader('Access-Control-Expose-Headers', 'DAV, ETag, Content-Location, Content-Range, Accept-Ranges, Link, Location, Retry-After, Server, WWW-Authenticate, Content-Length, X-Proxy-Version');
-    response.setHeader('Access-Control-Allow-Credentials', 'true');
     response.setHeader('Access-Control-Max-Age', '86400');
     response.setHeader('Vary', 'Origin, Access-Control-Request-Headers');
-    response.setHeader('X-Proxy-Version', '1.6.3');
+    response.setHeader('X-Proxy-Version', '1.6.4');
   };
 
   setCorsHeaders(res);
@@ -54,7 +53,7 @@ module.exports = async (req, res) => {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ 
         status: 'Proxy Active', 
-        version: '1.6.3',
+        version: '1.6.4',
         info: 'Target URL should be provided in X-Target-URL header'
       }));
       return;
@@ -67,7 +66,7 @@ module.exports = async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ 
       status: 'Proxy Active', 
-      version: '1.6.3',
+      version: '1.6.4',
       info: 'Target URL should be provided in X-Target-URL header'
     }));
     return;
