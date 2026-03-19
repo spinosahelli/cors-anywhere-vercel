@@ -8,11 +8,11 @@ module.exports = async (req, res) => {
   const setCorsHeaders = (response) => {
     response.setHeader('Access-Control-Allow-Origin', '*');
     response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PROPFIND, PROPPATCH, MKCOL, COPY, MOVE, LOCK, UNLOCK');
-    response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Depth, X-Requested-With, X-Target-URL, X-Proxy-Version');
-    response.setHeader('Access-Control-Expose-Headers', 'X-Proxy-Version, Content-Type, Content-Length, ETag, Last-Modified, WWW-Authenticate');
+    response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Depth, X-Requested-With, X-Target-URL, X-Proxy-Version, If, Overwrite, Destination, Range');
+    response.setHeader('Access-Control-Expose-Headers', 'X-Proxy-Version, Content-Type, Content-Length, ETag, Last-Modified, WWW-Authenticate, Dav, MS-Author-Via');
     response.setHeader('Access-Control-Allow-Credentials', 'false');
     response.setHeader('Access-Control-Max-Age', '86400');
-    response.setHeader('X-Proxy-Version', '1.7.0');
+    response.setHeader('X-Proxy-Version', '1.8.0');
   };
 
   setCorsHeaders(res);
@@ -28,7 +28,7 @@ module.exports = async (req, res) => {
   let targetBase = req.headers['x-target-url'];
   let targetUrl;
 
-  const reqUrl = new URL(req.url, `http://${req.headers.host}`);
+  const reqUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const queryUrl = reqUrl.searchParams.get('url');
 
   if (targetBase) {
@@ -38,6 +38,11 @@ module.exports = async (req, res) => {
       const base = targetBase.endsWith('/') ? targetBase : targetBase + '/';
       const cleanPath = path.startsWith('/') ? path.substring(1) : path;
       targetUrl = new URL(cleanPath, base).href;
+      
+      // If the original request had a trailing slash, ensure the target does too
+      if (req.url.split('?')[0].endsWith('/') && !targetUrl.endsWith('/')) {
+        targetUrl += '/';
+      }
     } catch (e) {
       targetUrl = targetBase + (targetBase.endsWith('/') ? '' : '/') + (path.startsWith('/') ? path.substring(1) : path);
     }
@@ -51,7 +56,7 @@ module.exports = async (req, res) => {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ 
         status: 'Proxy Active', 
-        version: '1.7.0',
+        version: '1.8.0',
         info: 'Target URL should be provided in X-Target-URL header'
       }));
       return;
@@ -63,7 +68,7 @@ module.exports = async (req, res) => {
   if (!targetUrl || !targetUrl.startsWith('http')) {
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ status: 'Proxy Active', version: '1.7.0' }));
+    res.end(JSON.stringify({ status: 'Proxy Active', version: '1.8.0' }));
     return;
   }
 
@@ -83,13 +88,22 @@ module.exports = async (req, res) => {
     delete options.headers.referer;
     delete options.headers.connection;
     delete options.headers['x-target-url'];
+    delete options.headers['access-control-request-headers'];
+    delete options.headers['access-control-request-method'];
+
+    // Ensure User-Agent is present
+    if (!options.headers['user-agent']) {
+      options.headers['user-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    }
 
     const transport = parsedUrl.protocol === 'https:' ? https : http;
     const proxyReq = transport.request(options, (proxyRes) => {
       res.statusCode = proxyRes.statusCode;
       
+      // Copy headers from target to client
       Object.keys(proxyRes.headers).forEach(key => {
         const lowerKey = key.toLowerCase();
+        // Skip CORS and hop-by-hop headers
         if (![
           'access-control-allow-origin', 
           'access-control-allow-methods', 
@@ -98,7 +112,13 @@ module.exports = async (req, res) => {
           'access-control-expose-headers', 
           'content-encoding', 
           'transfer-encoding', 
-          'connection'
+          'connection',
+          'keep-alive',
+          'proxy-authenticate',
+          'proxy-authorization',
+          'te',
+          'trailers',
+          'upgrade'
         ].includes(lowerKey)) {
           res.setHeader(key, proxyRes.headers[key]);
         }
