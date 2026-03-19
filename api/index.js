@@ -12,7 +12,7 @@ module.exports = async (req, res) => {
     response.setHeader('Access-Control-Expose-Headers', 'X-Proxy-Version, Content-Type, Content-Length, ETag, Last-Modified, WWW-Authenticate, Dav, MS-Author-Via, Location, Content-Range');
     response.setHeader('Access-Control-Allow-Credentials', 'false');
     response.setHeader('Access-Control-Max-Age', '86400');
-    response.setHeader('X-Proxy-Version', '1.8.4');
+    response.setHeader('X-Proxy-Version', '1.8.5');
   };
 
   setCorsHeaders(res);
@@ -25,7 +25,21 @@ module.exports = async (req, res) => {
     return;
   }
 
-  // 3. Determine Target URL
+  // 3. Buffer Body for non-GET requests (to support redirects)
+  let bodyBuffer = Buffer.alloc(0);
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    try {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+      bodyBuffer = Buffer.concat(chunks);
+    } catch (e) {
+      console.error('[Proxy] Body buffer error:', e);
+    }
+  }
+
+  // 4. Determine Target URL
   let targetBase = req.headers['x-target-url'];
   let targetUrl;
 
@@ -66,7 +80,7 @@ module.exports = async (req, res) => {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ 
         status: 'Proxy Active', 
-        version: '1.8.4',
+        version: '1.8.5',
         info: 'Target URL should be provided in X-Target-URL header'
       }));
       return;
@@ -77,7 +91,7 @@ module.exports = async (req, res) => {
   if (!targetUrl || !targetUrl.startsWith('http')) {
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ status: 'Proxy Active', version: '1.8.4' }));
+    res.end(JSON.stringify({ status: 'Proxy Active', version: '1.8.5' }));
     return;
   }
 
@@ -122,14 +136,24 @@ module.exports = async (req, res) => {
         }
 
         res.statusCode = proxyRes.statusCode;
+        
         Object.keys(proxyRes.headers).forEach(key => {
           const lowerKey = key.toLowerCase();
           if (![
-            'access-control-allow-origin', 'access-control-allow-methods', 
-            'access-control-allow-headers', 'access-control-allow-credentials', 
-            'access-control-expose-headers', 'content-encoding', 
-            'transfer-encoding', 'connection', 'keep-alive',
-            'proxy-authenticate', 'proxy-authorization', 'te', 'trailers', 'upgrade'
+            'access-control-allow-origin', 
+            'access-control-allow-methods', 
+            'access-control-allow-headers', 
+            'access-control-allow-credentials', 
+            'access-control-expose-headers', 
+            'content-encoding', 
+            'transfer-encoding', 
+            'connection',
+            'keep-alive',
+            'proxy-authenticate',
+            'proxy-authorization',
+            'te',
+            'trailers',
+            'upgrade'
           ].includes(lowerKey)) {
             res.setHeader(key, proxyRes.headers[key]);
           }
@@ -148,7 +172,7 @@ module.exports = async (req, res) => {
       if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
         proxyReq.end();
       } else {
-        req.pipe(proxyReq);
+        proxyReq.end(bodyBuffer);
       }
     } catch (err) {
       res.statusCode = 500;
