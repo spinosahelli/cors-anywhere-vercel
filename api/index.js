@@ -12,7 +12,7 @@ module.exports = async (req, res) => {
     response.setHeader('Access-Control-Expose-Headers', 'X-Proxy-Version, Content-Type, Content-Length, ETag, Last-Modified, WWW-Authenticate, Dav, MS-Author-Via, Location, Content-Range');
     response.setHeader('Access-Control-Allow-Credentials', 'false');
     response.setHeader('Access-Control-Max-Age', '86400');
-    response.setHeader('X-Proxy-Version', '1.8.2');
+    response.setHeader('X-Proxy-Version', '1.8.3');
   };
 
   setCorsHeaders(res);
@@ -34,10 +34,25 @@ module.exports = async (req, res) => {
 
   if (targetBase) {
     // Header-based: combine base from header with path from request
-    const path = req.url.split('?')[0].replace(/^\/api\//, '').replace(/^\/api$/, '');
+    let path = req.url.split('?')[0];
+    
+    // Strip the proxy prefix if present
+    path = path.replace(/^\/api\//, '').replace(/^\/api$/, '');
+    if (path === '/') path = '';
+
     try {
+      const baseUrl = new URL(targetBase);
+      const basePath = baseUrl.pathname; // e.g. "/dav/"
+      
+      // If the incoming path already starts with the target's base path, strip it
+      // to avoid doubling up (e.g. /dav/ + /dav/file -> /dav/dav/file)
+      let cleanPath = path;
+      if (basePath && basePath !== '/' && cleanPath.startsWith(basePath)) {
+        cleanPath = cleanPath.substring(basePath.length);
+      }
+      if (cleanPath.startsWith('/')) cleanPath = cleanPath.substring(1);
+
       const base = targetBase.endsWith('/') ? targetBase : targetBase + '/';
-      const cleanPath = path.startsWith('/') ? path.substring(1) : path;
       targetUrl = new URL(cleanPath, base).href;
       
       // If the original request had a trailing slash, ensure the target does too
@@ -45,7 +60,9 @@ module.exports = async (req, res) => {
         targetUrl += '/';
       }
     } catch (e) {
-      targetUrl = targetBase + (targetBase.endsWith('/') ? '' : '/') + (path.startsWith('/') ? path.substring(1) : path);
+      // Fallback
+      const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+      targetUrl = targetBase + (targetBase.endsWith('/') ? '' : '/') + cleanPath;
     }
   } else if (queryUrl) {
     targetUrl = queryUrl;
@@ -57,7 +74,7 @@ module.exports = async (req, res) => {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ 
         status: 'Proxy Active', 
-        version: '1.8.2',
+        version: '1.8.3',
         info: 'Target URL should be provided in X-Target-URL header'
       }));
       return;
@@ -69,7 +86,7 @@ module.exports = async (req, res) => {
   if (!targetUrl || !targetUrl.startsWith('http')) {
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ status: 'Proxy Active', version: '1.8.2' }));
+    res.end(JSON.stringify({ status: 'Proxy Active', version: '1.8.3' }));
     return;
   }
 
