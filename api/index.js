@@ -9,7 +9,7 @@ module.exports = async (req, res) => {
     response.setHeader('Access-Control-Expose-Headers', '*');
     response.setHeader('Access-Control-Allow-Credentials', 'false');
     response.setHeader('Access-Control-Max-Age', '86400');
-    response.setHeader('X-Proxy-Version', '1.6.8');
+    response.setHeader('X-Proxy-Version', '1.6.9');
   };
 
   setCorsHeaders(res);
@@ -33,7 +33,7 @@ module.exports = async (req, res) => {
     if (path === '/api' || path === '/api/' || path === '/') {
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ status: 'Proxy Active', version: '1.6.8' }));
+      res.end(JSON.stringify({ status: 'Proxy Active', version: '1.6.9' }));
       return;
     }
     targetUrl = req.url.replace(/^\/api\//, '').replace(/^(https?):\/+/, '$1://');
@@ -42,7 +42,7 @@ module.exports = async (req, res) => {
   if (!targetUrl || !targetUrl.startsWith('http')) {
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ status: 'Proxy Active', version: '1.6.8' }));
+    res.end(JSON.stringify({ status: 'Proxy Active', version: '1.6.9' }));
     return;
   }
 
