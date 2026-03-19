@@ -90,7 +90,16 @@ module.exports = async (req, res) => {
       // Copy headers from target to client
       Object.keys(proxyRes.headers).forEach(key => {
         const lowerKey = key.toLowerCase();
-        if (!lowerKey.startsWith('access-control-')) {
+        if (![
+          'access-control-allow-origin', 
+          'access-control-allow-methods', 
+          'access-control-allow-headers', 
+          'access-control-allow-credentials', 
+          'access-control-expose-headers', 
+          'content-encoding', 
+          'transfer-encoding', 
+          'connection'
+        ].includes(lowerKey)) {
           res.setHeader(key, proxyRes.headers[key]);
         }
       });
