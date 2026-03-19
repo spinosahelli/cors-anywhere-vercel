@@ -17,14 +17,14 @@ module.exports = async (req, res) => {
     response.setHeader('Access-Control-Allow-Credentials', 'true');
     response.setHeader('Access-Control-Max-Age', '86400');
     response.setHeader('Vary', 'Origin, Access-Control-Request-Headers');
-    response.setHeader('X-Proxy-Version', '1.6.2');
+    response.setHeader('X-Proxy-Version', '1.6.3');
   };
 
   setCorsHeaders(res);
 
   // 2. Handle Preflight
   if (req.method === 'OPTIONS') {
-    res.statusCode = 204;
+    res.statusCode = 200;
     res.end();
     return;
   }
@@ -37,7 +37,7 @@ module.exports = async (req, res) => {
   const queryUrl = reqUrl.searchParams.get('url');
 
   if (targetBase) {
-    const path = req.url.split('?')[0].replace(/^\/api\//, '');
+    const path = req.url.split('?')[0].replace(/^\/api\//, '').replace(/^\/api$/, '');
     try {
       const base = targetBase.endsWith('/') ? targetBase : targetBase + '/';
       const cleanPath = path.startsWith('/') ? path.substring(1) : path;
@@ -48,6 +48,17 @@ module.exports = async (req, res) => {
   } else if (queryUrl) {
     targetUrl = queryUrl;
   } else {
+    const path = req.url.split('?')[0];
+    if (path === '/api' || path === '/api/' || path === '/') {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ 
+        status: 'Proxy Active', 
+        version: '1.6.3',
+        info: 'Target URL should be provided in X-Target-URL header'
+      }));
+      return;
+    }
     targetUrl = req.url.replace(/^\/api\//, '').replace(/^(https?):\/+/, '$1://');
   }
 
@@ -56,7 +67,7 @@ module.exports = async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ 
       status: 'Proxy Active', 
-      version: '1.6.2',
+      version: '1.6.3',
       info: 'Target URL should be provided in X-Target-URL header'
     }));
     return;
