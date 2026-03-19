@@ -13,8 +13,9 @@ module.exports = async (req, res) => {
     response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PROPFIND, PROPPATCH, MKCOL, COPY, MOVE, LOCK, UNLOCK');
     response.setHeader('Access-Control-Allow-Headers', '*');
     response.setHeader('Access-Control-Expose-Headers', '*');
+    response.setHeader('Access-Control-Allow-Credentials', 'false');
     response.setHeader('Access-Control-Max-Age', '86400');
-    response.setHeader('X-Proxy-Version', '1.6.6');
+    response.setHeader('X-Proxy-Version', '1.6.7');
   };
 
   setCorsHeaders(res);
@@ -51,7 +52,7 @@ module.exports = async (req, res) => {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ 
         status: 'Proxy Active', 
-        version: '1.6.6',
+        version: '1.6.7',
         info: 'Target URL should be provided in X-Target-URL header'
       }));
       return;
@@ -64,7 +65,7 @@ module.exports = async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ 
       status: 'Proxy Active', 
-      version: '1.6.6',
+      version: '1.6.7',
       info: 'Target URL should be provided in X-Target-URL header'
     }));
     return;
