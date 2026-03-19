@@ -28,6 +28,9 @@ module.exports = async (req, res) => {
   let targetBase = req.headers['x-target-url'];
   let targetUrl;
 
+  const reqUrl = new URL(req.url, `http://${req.headers.host}`);
+  const queryUrl = reqUrl.searchParams.get('url');
+
   if (targetBase) {
     // Header-based: combine base from header with path from request
     const path = req.url.split('?')[0].replace(/^\/api\//, '').replace(/^\/api$/, '');
@@ -38,9 +41,11 @@ module.exports = async (req, res) => {
     } catch (e) {
       targetUrl = targetBase + (targetBase.endsWith('/') ? '' : '/') + (path.startsWith('/') ? path.substring(1) : path);
     }
+  } else if (queryUrl) {
+    targetUrl = queryUrl;
   } else {
-    // Direct check for status
     const path = req.url.split('?')[0];
+    // If no target URL is provided, and we are hitting a "base" path, return proxy info
     if (path === '/api' || path === '/api/' || path === '/') {
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
@@ -51,6 +56,7 @@ module.exports = async (req, res) => {
       }));
       return;
     }
+    // Fallback for older query-style or direct pathing
     targetUrl = req.url.replace(/^\/api\//, '').replace(/^(https?):\/+/, '$1://');
   }
 
@@ -78,16 +84,10 @@ module.exports = async (req, res) => {
     delete options.headers.connection;
     delete options.headers['x-target-url'];
 
-    // Ensure User-Agent is present
-    if (!options.headers['user-agent']) {
-      options.headers['user-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-    }
-
     const transport = parsedUrl.protocol === 'https:' ? https : http;
     const proxyReq = transport.request(options, (proxyRes) => {
       res.statusCode = proxyRes.statusCode;
       
-      // Copy headers from target to client
       Object.keys(proxyRes.headers).forEach(key => {
         const lowerKey = key.toLowerCase();
         if (![
