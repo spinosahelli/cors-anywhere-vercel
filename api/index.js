@@ -1,88 +1,70 @@
 const https = require('https');
 const http = require('http');
+const url = require('url');
 
 module.exports = async (req, res) => {
-  // 1. Absolute Permissive CORS Headers
   const origin = req.headers.origin || '*';
   res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PROPFIND, PROPPATCH, MKCOL, COPY, MOVE, LOCK, UNLOCK');
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Depth, Destination, If, Lock-Token, Overwrite, Timeout, X-Requested-With, Accept, Accept-Language, Cache-Control');
   res.setHeader('Access-Control-Allow-Credentials', 'false');
-  res.setHeader('Access-Control-Max-Age', '86400');
-
-  // 2. Handle Preflight (OPTIONS)
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PROPFIND, MKCOL, COPY, MOVE, LOCK, UNLOCK');
+  const requestedHeaders = req.headers['access-control-request-headers'];
+  if (requestedHeaders) {
+    res.setHeader('Access-Control-Allow-Headers', requestedHeaders);
+  } else {
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Depth, Destination, Overwrite, X-Requested-With');
+  }
   if (req.method === 'OPTIONS') {
-    res.statusCode = 200;
+    res.statusCode = 204;
     res.end();
     return;
   }
-
-  // 3. Extract and Fix Target URL
   let targetUrl = req.url.replace(/^\/api\//, '');
-  // Fix protocol if collapsed (e.g., https:/dav... -> https://dav...)
-  targetUrl = targetUrl.replace(/^(https?):\/+/, '$1://');
-
-  if (!targetUrl.startsWith('http')) {
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ status: 'Proxy Active', version: '1.4.1' }));
-    return;
+  if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+    if (targetUrl.startsWith('/https:/')) {
+      targetUrl = targetUrl.substring(1).replace('https:/', 'https://');
+    } else if (targetUrl.startsWith('https:/')) {
+      targetUrl = targetUrl.replace('https:/', 'https://');
+    } else {
+      res.statusCode = 400;
+      res.end('Invalid target URL');
+      return;
+    }
   }
-
   try {
-    const parsedUrl = new URL(targetUrl);
+    const parsedUrl = url.parse(targetUrl);
+    const isHttps = parsedUrl.protocol === 'https:';
+    const transport = isHttps ? https : http;
+    const headers = { ...req.headers };
+    delete headers.host;
+    delete headers.origin;
+    delete headers.referer;
+    delete headers.connection;
     const options = {
-      method: req.method,
       hostname: parsedUrl.hostname,
-      port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
-      path: parsedUrl.pathname + parsedUrl.search,
-      headers: { ...req.headers },
+      port: parsedUrl.port || (isHttps ? 443 : 80),
+      path: parsedUrl.path,
+      method: req.method,
+      headers: headers,
+      timeout: 30000
     };
-
-    // Remove headers that would interfere with the target server
-    delete options.headers.host;
-    delete options.headers.origin;
-    delete options.headers.referer;
-    delete options.headers.connection;
-
-    // Add a standard User-Agent for Jianguoyun compatibility
-    options.headers['user-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-
-    // 4. Stream the Request
-    const transport = parsedUrl.protocol === 'https:' ? https : http;
     const proxyReq = transport.request(options, (proxyRes) => {
-      // Set status and copy headers
-      res.statusCode = proxyRes.statusCode;
-      
       Object.keys(proxyRes.headers).forEach(key => {
-        const lowerKey = key.toLowerCase();
-        // Skip CORS and encoding headers from target
-        if (!['access-control-allow-origin', 'access-control-allow-methods', 'access-control-allow-headers', 'access-control-allow-credentials', 'content-encoding', 'transfer-encoding', 'connection'].includes(lowerKey)) {
+        if (!['content-encoding', 'transfer-encoding', 'connection', 'access-control-allow-origin', 'access-control-allow-credentials', 'access-control-allow-methods', 'access-control-allow-headers'].includes(key.toLowerCase())) {
           res.setHeader(key, proxyRes.headers[key]);
         }
       });
-
-      // Re-apply CORS to the ACTUAL response (CRITICAL for non-simple requests)
       res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PROPFIND, PROPPATCH, MKCOL, COPY, MOVE, LOCK, UNLOCK');
-      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Depth, Destination, If, Lock-Token, Overwrite, Timeout, X-Requested-With, Accept, Accept-Language, Cache-Control');
       res.setHeader('Access-Control-Allow-Credentials', 'false');
-
-      // Pipe response back
+      res.statusCode = proxyRes.statusCode;
       proxyRes.pipe(res);
     });
-
     proxyReq.on('error', (err) => {
-      console.error('Proxy Request Error:', err);
       res.statusCode = 502;
-      res.end(`Proxy Error: ${err.message}`);
+      res.end('Proxy Error');
     });
-
-    // Pipe request body to target
     req.pipe(proxyReq);
   } catch (err) {
-    console.error('Proxy Setup Error:', err);
     res.statusCode = 500;
-    res.end(`Internal Proxy Error: ${err.message}`);
+    res.end('Internal Proxy Error');
   }
 };
