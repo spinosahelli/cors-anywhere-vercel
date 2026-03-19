@@ -1,8 +1,20 @@
 {
   "version": 2,
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Credentials", "value": "false" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET,OPTIONS,PATCH,DELETE,POST,PUT,PROPFIND,PROPPATCH,MKCOL,COPY,MOVE,LOCK,UNLOCK" },
+        { "key": "Access-Control-Allow-Headers", "value": "Authorization, Content-Type, Depth, X-Requested-With, X-Target-URL, X-Proxy-Version" }
+      ]
+    }
+  ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index.js" },
     { "source": "/api", "destination": "/api/index.js" },
     { "source": "/", "destination": "/api/index.js" }
-  ]
+  ],
+  "trailingSlash": true
 }
