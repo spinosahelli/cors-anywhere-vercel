@@ -7,7 +7,8 @@
         { "key": "Access-Control-Allow-Credentials", "value": "false" },
         { "key": "Access-Control-Allow-Origin", "value": "*" },
         { "key": "Access-Control-Allow-Methods", "value": "GET,OPTIONS,PATCH,DELETE,POST,PUT,PROPFIND,PROPPATCH,MKCOL,COPY,MOVE,LOCK,UNLOCK" },
-        { "key": "Access-Control-Allow-Headers", "value": "Authorization, Content-Type, Depth, X-Requested-With, X-Target-URL, X-Proxy-Version" }
+        { "key": "Access-Control-Allow-Headers", "value": "Authorization, Content-Type, Depth, X-Requested-With, X-Target-URL, X-Proxy-Version, If, Overwrite, Destination" },
+        { "key": "Access-Control-Expose-Headers", "value": "X-Proxy-Version, Content-Type, Content-Length, ETag, Last-Modified, WWW-Authenticate" }
       ]
     }
   ],
