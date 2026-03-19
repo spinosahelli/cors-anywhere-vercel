@@ -8,11 +8,11 @@ module.exports = async (req, res) => {
   const setCorsHeaders = (response) => {
     response.setHeader('Access-Control-Allow-Origin', '*');
     response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PROPFIND, PROPPATCH, MKCOL, COPY, MOVE, LOCK, UNLOCK');
-    response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Depth, X-Requested-With, X-Target-URL, X-Proxy-Version, If, Overwrite, Destination, Range, Lock-Token, Timeout, Accept, Accept-Language, Content-Length');
-    response.setHeader('Access-Control-Expose-Headers', 'X-Proxy-Version, Content-Type, Content-Length, ETag, Last-Modified, WWW-Authenticate, Dav, MS-Author-Via, Location');
+    response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Depth, X-Requested-With, X-Target-URL, X-Proxy-Version, If, Overwrite, Destination, Range, Lock-Token, Timeout, Accept, Accept-Language, Content-Length, Prefer, Brief, Content-Range');
+    response.setHeader('Access-Control-Expose-Headers', 'X-Proxy-Version, Content-Type, Content-Length, ETag, Last-Modified, WWW-Authenticate, Dav, MS-Author-Via, Location, Content-Range');
     response.setHeader('Access-Control-Allow-Credentials', 'false');
     response.setHeader('Access-Control-Max-Age', '86400');
-    response.setHeader('X-Proxy-Version', '1.8.1');
+    response.setHeader('X-Proxy-Version', '1.8.2');
   };
 
   setCorsHeaders(res);
@@ -33,12 +33,14 @@ module.exports = async (req, res) => {
   const queryUrl = reqUrl.searchParams.get('url');
 
   if (targetBase) {
+    // Header-based: combine base from header with path from request
     const path = req.url.split('?')[0].replace(/^\/api\//, '').replace(/^\/api$/, '');
     try {
       const base = targetBase.endsWith('/') ? targetBase : targetBase + '/';
       const cleanPath = path.startsWith('/') ? path.substring(1) : path;
       targetUrl = new URL(cleanPath, base).href;
       
+      // If the original request had a trailing slash, ensure the target does too
       if (req.url.split('?')[0].endsWith('/') && !targetUrl.endsWith('/')) {
         targetUrl += '/';
       }
@@ -49,23 +51,25 @@ module.exports = async (req, res) => {
     targetUrl = queryUrl;
   } else {
     const path = req.url.split('?')[0];
+    // If no target URL is provided, and we are hitting a "base" path, return proxy info
     if (path === '/api' || path === '/api/' || path === '/') {
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ 
         status: 'Proxy Active', 
-        version: '1.8.1',
+        version: '1.8.2',
         info: 'Target URL should be provided in X-Target-URL header'
       }));
       return;
     }
+    // Fallback for older query-style or direct pathing
     targetUrl = req.url.replace(/^\/api\//, '').replace(/^(https?):\/+/, '$1://');
   }
 
   if (!targetUrl || !targetUrl.startsWith('http')) {
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ status: 'Proxy Active', version: '1.8.1' }));
+    res.end(JSON.stringify({ status: 'Proxy Active', version: '1.8.2' }));
     return;
   }
 
@@ -86,6 +90,7 @@ module.exports = async (req, res) => {
         headers: { ...req.headers },
       };
 
+      // Clean up headers for the target
       delete options.headers.host;
       delete options.headers.origin;
       delete options.headers.referer;
@@ -94,26 +99,30 @@ module.exports = async (req, res) => {
       delete options.headers['access-control-request-headers'];
       delete options.headers['access-control-request-method'];
 
+      // Ensure User-Agent is present
       if (!options.headers['user-agent']) {
         options.headers['user-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
       }
 
       const transport = parsedUrl.protocol === 'https:' ? https : http;
       const proxyReq = transport.request(options, (proxyRes) => {
-        // Handle Redirects (301, 302, 307, 308)
+        // Handle Redirects
         if ([301, 302, 307, 308].includes(proxyRes.statusCode) && proxyRes.headers.location) {
           let redirectUrl = proxyRes.headers.location;
           if (!redirectUrl.startsWith('http')) {
             redirectUrl = new URL(redirectUrl, currentUrl).href;
           }
+          console.log(`[Proxy] Following redirect to: ${redirectUrl}`);
           performRequest(redirectUrl, redirectCount + 1);
           return;
         }
 
         res.statusCode = proxyRes.statusCode;
         
+        // Copy headers from target to client
         Object.keys(proxyRes.headers).forEach(key => {
           const lowerKey = key.toLowerCase();
+          // Skip CORS and hop-by-hop headers
           if (![
             'access-control-allow-origin', 
             'access-control-allow-methods', 
@@ -144,7 +153,8 @@ module.exports = async (req, res) => {
         res.end(`Proxy Error: ${err.message}`);
       });
 
-      if (['GET', 'HEAD', 'OPTIONS', 'DELETE', 'PROPFIND'].includes(req.method)) {
+      // Pipe request body for methods like PROPFIND, PUT, POST
+      if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
         proxyReq.end();
       } else {
         req.pipe(proxyReq);
