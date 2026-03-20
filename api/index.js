@@ -82,6 +82,7 @@ module.exports = async (req, res) => {
     targetUrl = queryUrl;
   } else {
     const path = req.url.split('?')[0];
+    // If no target URL is provided, and we are hitting a "base" path, return proxy info
     if (path === '/api' || path === '/api/' || path === '/') {
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
@@ -92,6 +93,7 @@ module.exports = async (req, res) => {
       }));
       return;
     }
+    // Fallback for older query-style or direct pathing
     targetUrl = req.url.replace(/^\/api\//, '').replace(/^(https?):\/+/, '$1://');
   }
 
@@ -119,6 +121,7 @@ module.exports = async (req, res) => {
         headers: { ...req.headers },
       };
 
+      // Clean up headers for the target
       delete options.headers.host;
       delete options.headers.origin;
       delete options.headers.referer;
@@ -127,6 +130,7 @@ module.exports = async (req, res) => {
       delete options.headers['access-control-request-headers'];
       delete options.headers['access-control-request-method'];
 
+      // Ensure User-Agent is present
       if (!options.headers['user-agent']) {
         options.headers['user-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
       }
@@ -139,14 +143,17 @@ module.exports = async (req, res) => {
           if (!redirectUrl.startsWith('http')) {
             redirectUrl = new URL(redirectUrl, currentUrl).href;
           }
+          console.log(`[Proxy] Following redirect to: ${redirectUrl}`);
           performRequest(redirectUrl, redirectCount + 1);
           return;
         }
 
         res.statusCode = proxyRes.statusCode;
         
+        // Copy headers from target to client
         Object.keys(proxyRes.headers).forEach(key => {
           const lowerKey = key.toLowerCase();
+          // Skip CORS and hop-by-hop headers
           if (![
             'access-control-allow-origin', 
             'access-control-allow-methods', 
