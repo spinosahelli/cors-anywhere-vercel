@@ -7,12 +7,12 @@ module.exports = async (req, res) => {
   // 1. Dynamic CORS Setup
   const setCorsHeaders = (response) => {
     response.setHeader('Access-Control-Allow-Origin', '*');
-    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PROPFIND, PROPPATCH, MKCOL, COPY, MOVE, LOCK, UNLOCK');
-    response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Depth, X-Requested-With, X-Target-URL, X-Proxy-Version, If, Overwrite, Destination, Range, Lock-Token, Timeout, Accept, Accept-Language, Content-Length, Prefer, Brief, Content-Range');
-    response.setHeader('Access-Control-Expose-Headers', 'X-Proxy-Version, Content-Type, Content-Length, ETag, Last-Modified, WWW-Authenticate, Dav, MS-Author-Via, Location, Content-Range');
+    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PROPFIND, PROPPATCH, MKCOL, COPY, MOVE, LOCK, UNLOCK, PATCH');
+    response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Depth, X-Requested-With, X-Target-URL, X-Proxy-Version, If, Overwrite, Destination, Range, Lock-Token, Timeout, Accept, Accept-Language, Content-Length, Prefer, Brief, Content-Range, Translate, User-Agent');
+    response.setHeader('Access-Control-Expose-Headers', 'X-Proxy-Version, Content-Type, Content-Length, ETag, Last-Modified, WWW-Authenticate, Dav, MS-Author-Via, Location, Content-Range, X-Target-URL');
     response.setHeader('Access-Control-Allow-Credentials', 'false');
     response.setHeader('Access-Control-Max-Age', '86400');
-    response.setHeader('X-Proxy-Version', '1.8.5');
+    response.setHeader('X-Proxy-Version', '1.8.6');
   };
 
   setCorsHeaders(res);
@@ -47,14 +47,19 @@ module.exports = async (req, res) => {
   const queryUrl = reqUrl.searchParams.get('url');
 
   if (targetBase) {
+    // Header-based: combine base from header with path from request
     let path = req.url.split('?')[0];
+    
+    // Strip the proxy prefix if present
     path = path.replace(/^\/api\//, '').replace(/^\/api$/, '');
     if (path === '/') path = '';
 
     try {
       const baseUrl = new URL(targetBase);
-      const basePath = baseUrl.pathname;
+      const basePath = baseUrl.pathname; // e.g. "/dav/"
       
+      // If the incoming path already starts with the target's base path, strip it
+      // to avoid doubling up (e.g. /dav/ + /dav/file -> /dav/dav/file)
       let cleanPath = path;
       if (basePath && basePath !== '/' && cleanPath.startsWith(basePath)) {
         cleanPath = cleanPath.substring(basePath.length);
@@ -64,10 +69,12 @@ module.exports = async (req, res) => {
       const base = targetBase.endsWith('/') ? targetBase : targetBase + '/';
       targetUrl = new URL(cleanPath, base).href;
       
+      // If the original request had a trailing slash, ensure the target does too
       if (req.url.split('?')[0].endsWith('/') && !targetUrl.endsWith('/')) {
         targetUrl += '/';
       }
     } catch (e) {
+      // Fallback
       const cleanPath = path.startsWith('/') ? path.substring(1) : path;
       targetUrl = targetBase + (targetBase.endsWith('/') ? '' : '/') + cleanPath;
     }
@@ -80,7 +87,7 @@ module.exports = async (req, res) => {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ 
         status: 'Proxy Active', 
-        version: '1.8.5',
+        version: '1.8.6',
         info: 'Target URL should be provided in X-Target-URL header'
       }));
       return;
@@ -91,7 +98,7 @@ module.exports = async (req, res) => {
   if (!targetUrl || !targetUrl.startsWith('http')) {
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ status: 'Proxy Active', version: '1.8.5' }));
+    res.end(JSON.stringify({ status: 'Proxy Active', version: '1.8.6' }));
     return;
   }
 
@@ -126,6 +133,7 @@ module.exports = async (req, res) => {
 
       const transport = parsedUrl.protocol === 'https:' ? https : http;
       const proxyReq = transport.request(options, (proxyRes) => {
+        // Handle Redirects
         if ([301, 302, 307, 308].includes(proxyRes.statusCode) && proxyRes.headers.location) {
           let redirectUrl = proxyRes.headers.location;
           if (!redirectUrl.startsWith('http')) {
@@ -169,6 +177,7 @@ module.exports = async (req, res) => {
         res.end(`Proxy Error: ${err.message}`);
       });
 
+      // Send buffered body or end request
       if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
         proxyReq.end();
       } else {
